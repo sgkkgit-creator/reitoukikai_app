@@ -106,8 +106,6 @@ p{margin:0}
 .stmt.can{cursor:pointer}
 .stmt.struck .t{text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:var(--ng);color:var(--muted)}
 .stmt.struck .kana{border-style:dashed;color:var(--muted);border-color:var(--muted)}
-.opt.hint{border-color:var(--teal);box-shadow:inset 0 0 0 1px var(--teal)}
-.opt.hint .mark{color:var(--teal-ink)}
 .hintnote{margin-top:8px;font-size:12px;color:var(--muted)}
 .verdict{display:inline-block;font-weight:700;font-size:13px;margin-right:6px}
 .stmt.ok .verdict{color:var(--ok)} .stmt.ng .verdict{color:var(--ng)}
@@ -464,15 +462,9 @@ function statementHTML(q, i, reveal, canStrike){
   return '<li class="stmt'+cls+'"'+(canStrike? ' data-action="strike" data-i="'+i+'" role="button" tabindex="0" aria-pressed="'+(struck?'true':'false')+'" title="タップで取消線（誤りと判断した記述の目印）"':'')+'><span class="kana" aria-hidden="true">'+esc(st.k)+'</span><div><div class="t">'+(reveal?'<span class="verdict">'+(st.ok?'正':'誤')+'</span>':'')+esc(st.t)+'</div>'+(reveal?'<div class="why">'+esc(st.why)+'</div>':'')+'</div></li>';
 }
 function optionsHTML(q, chosen, reveal, disabled){
-  var hintIdx = -1;
-  if(!reveal && isCombo(q) && S && strikeSet().length){
-    var rest = q.statements.map(function(_,k){return k;}).filter(function(k){ return strikeSet().indexOf(k)<0; }).join(',');
-    q.opts.forEach(function(o,k){ if(o.join(',')===rest) hintIdx=k; });
-  }
   return '<ol class="opts">'+q.opts.map(function(o,i){
     var lab = isCombo(q) ? comboLabel(o) : o;
     var cls = 'opt'; var mark='';
-    if(!reveal && hintIdx===i){ cls+=' hint'; mark='取消線の残り'; }
     if(reveal){ if(i===q.ans){ cls+=' correct'; mark='正解'; } else if(i===chosen){ cls+=' wrong'; mark='あなたの解答'; } }
     return '<li><button class="'+cls+'" data-action="choose" data-i="'+i+'" aria-pressed="'+(chosen===i?'true':'false')+'"'+(disabled?' disabled':'')+'><span class="num">('+(i+1)+')</span><span class="lab">'+esc(lab)+'</span><span class="mark">'+mark+'</span></button></li>';
   }).join('')+'</ol>';
