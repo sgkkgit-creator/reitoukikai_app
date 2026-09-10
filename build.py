@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 SHELL = ROOT / "shell.html"
-SOURCES = ["questions.json", "questions2.json"]
+SOURCES = ["questions.json", "questions2.json", "questions3.json", "questions4.json", "questions5.json"]
 OUT = ROOT / "index.html"
 PLACEHOLDER = "/*__DATA__*/"
 

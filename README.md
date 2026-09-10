@@ -24,6 +24,9 @@ Settings → Pages で公開すると、`https://<ユーザー名>.github.io/<�
 | `shell.html` | アプリ本体（HTML/CSS/JS）。`/*__DATA__*/` に問題データが埋め込まれる |
 | `questions.json` | 論点表と問題データ（三冷：法令40問・保安30問。法令は二冷と共用） |
 | `questions2.json` | 二冷の追加問題（保安20問・学識理論16問・法令事例形式12問）と事例文 |
+| `questions3.json` | 法令の追加問題（20論点×3問＝60問、三冷・二冷共用） |
+| `questions4.json` | 三冷 保安管理技術の追加問題（15論点×3問＝45問） |
+| `questions5.json` | 二冷の追加問題（保安10論点×3問＝30問、学識8論点×3問＝24問） |
 | `build.py` | 検証・選択肢生成・結合。`python3 build.py` で `index.html` を再生成 |
 
 ## 問題データの形式
