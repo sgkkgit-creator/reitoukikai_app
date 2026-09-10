@@ -216,13 +216,16 @@ function mmss(sec){ sec=Math.max(0,sec); return pad(Math.floor(sec/60))+":"+pad(
 function zen(n){ return String(n).replace(/[0-9]/g, function(d){ return "０１２３４５６７８９"[+d]; }); }
 function comboLabel(idx){ return idx.map(function(i){ return KANA[i]; }).join("、"); }
 function topicsFor(level, subject){ return (DATA.topics[level] && DATA.topics[level][subject]) || []; }
+function topicLabel(q){ var n = topicName(S.level, q.subject, q.slot); return q.case ? n : n.replace(/^事例[AB]：/, ""); } /* 設定文のない一般問題には「事例A：」を付けない */
 function topicName(level, subject, slot){ var t = topicsFor(level, subject).filter(function(x){ return x.no===slot; })[0]; return t ? t.name : ""; }
 
 /* ---------- question pool ---------- */
 function poolFor(level, subject, slots){
   var out = [];
   DATA.questions.forEach(function(q){
-    if(q.subject===subject && q.levels.indexOf(level)>=0 && (!slots || slots.indexOf(q.slot)>=0)) out.push(q);
+    if(q.subject!==subject || q.levels.indexOf(level)<0) return;
+    var qq = (level==="2" && q.slot2 && q.slot2!==q.slot) ? Object.assign({}, q, {slot:q.slot2}) : q; /* 共用問題は級ごとに論点番号が異なる */
+    if(!slots || slots.indexOf(qq.slot)>=0) out.push(qq);
   });
   topicsFor(level, subject).forEach(function(t){
     if(t.gen && (!slots || slots.indexOf(t.no)>=0)) out.push({gen:t.gen, slot:t.no, subject:subject, id:"G-"+t.gen, levels:[level]});
@@ -426,7 +429,7 @@ function renderSetup(mode){
     var cfg = EXAM[lv][s];
     var disabled = isExam ? covered<total : p.length===0;
     var desc = isExam ? (cfg.n+'問／'+cfg.min+'分' + (disabled? '　（問題データ準備中：'+covered+'／'+total+'論点）':''))
-                      : (p.length? (n+'問'+(gens? '＋計算問題'+gens+'種（毎回数値が変わります）':'')) : '問題データ準備中');
+                      : (p.length? (n+'問'+(gens? '＋計算問題'+gens+'種（毎回数値が変わります）':'')+(lv==="2"&&s==="law"? '。本試験では問9〜20が事例形式（設定文つき）':'')) : '問題データ準備中');
     return '<button class="opt-card" data-action="'+(isExam?'exam':'drillslots')+'" data-subject="'+s+'" aria-disabled="'+(disabled?'true':'false')+'"'+(disabled?' disabled':'')+'><div><div class="t"><span class="tag '+SUBJ[s].cls+'">'+SUBJ[s].name+'</span></div><div class="d">'+esc(desc)+'</div></div><span aria-hidden="true">›</span></button>';
   }).join('');
   return '<div class="stack">'+
@@ -478,7 +481,7 @@ function renderQuestion(){
   var head = '<div class="qbar"><span class="prog">問 '+(i+1)+' ／ '+n+'</span>'+
     (isExam ? '<span id="timer" class="timer">'+mmss(S.limit - Math.floor((Date.now()-S.start)/1000))+'</span>' : '<span class="muted small">'+(S.mode==="review"?'復習':'ドリル')+'　正解 '+S.items.filter(function(x,k){return S.revealed[k] && S.ans[k]===x.ans;}).length+'</span>')+
     '</div><div class="progress"><i style="width:'+Math.round(((i+(reveal?1:0))/n)*100)+'%"></i></div>';
-  var body = '<div class="qpaper"><div class="qhead"><span class="qno">問'+zen(isExam? q.slot : i+1)+'</span><span class="tag '+SUBJ[q.subject].cls+'">'+SUBJ[q.subject].name+'</span><span class="qtopic">'+esc(topicName(S.level, q.subject, q.slot))+'</span></div>'+
+  var body = '<div class="qpaper"><div class="qhead"><span class="qno">問'+zen(isExam? q.slot : i+1)+'</span><span class="tag '+SUBJ[q.subject].cls+'">'+SUBJ[q.subject].name+'</span><span class="qtopic">'+esc(topicLabel(q))+'</span></div>'+
     (q.case&&DATA.cases&&DATA.cases[q.case]? '<div class="given" style="margin:0 0 10px">'+esc(DATA.cases[q.case])+'</div>':'')+'<p class="stem">'+esc(q.stem)+'</p>'+
     (q.figure? '<div class="figure">'+q.figure+'</div>':'')+
     (q.given? '<div class="given">'+esc(q.given)+'</div>':'')+
@@ -503,7 +506,7 @@ function renderResult(){
   var n=S.items.length, ok=S.score, pass = ok>=Math.ceil(n*PASS);
   var list = S.items.map(function(q,i){
     var c = S.ans[i]===q.ans;
-    return '<li class="ritem"><button data-action="toggle" data-i="'+i+'" aria-expanded="false"><span class="mk '+(c?'ok':'ng')+'">'+(c?'○':'×')+'</span><span>問'+q.slot+'　'+esc(topicName(S.level,q.subject,q.slot))+'</span><span class="an">'+(S.ans[i]>=0? '('+(S.ans[i]+1)+')':'未解答')+' → ('+(q.ans+1)+')</span><span class="caret">›</span></button><div class="detail" id="d'+i+'" hidden></div></li>';
+    return '<li class="ritem"><button data-action="toggle" data-i="'+i+'" aria-expanded="false"><span class="mk '+(c?'ok':'ng')+'">'+(c?'○':'×')+'</span><span>問'+q.slot+'　'+esc(topicLabel(q))+'</span><span class="an">'+(S.ans[i]>=0? '('+(S.ans[i]+1)+')':'未解答')+' → ('+(q.ans+1)+')</span><span class="caret">›</span></button><div class="detail" id="d'+i+'" hidden></div></li>';
   }).join('');
   return '<div class="stack">'+
     '<div class="spread"><h1>採点結果　<span class="tag '+SUBJ[S.subject].cls+'">'+SUBJ[S.subject].name+'</span></h1><button class="btn ghost" data-action="home">ホーム</button></div>'+
@@ -520,7 +523,7 @@ function detailHTML(q, chosen){
 }
 function renderDrillDone(){
   var n=S.items.length, ok=S.items.filter(function(q,i){return S.ans[i]===q.ans;}).length;
-  var wrong = S.items.map(function(q,i){ return S.ans[i]===q.ans? null : '<li class="ritem"><button data-action="toggle" data-i="'+i+'" aria-expanded="false"><span class="mk ng">×</span><span>問'+q.slot+'　'+esc(topicName(S.level,q.subject,q.slot))+'</span><span class="an">('+(S.ans[i]+1)+') → ('+(q.ans+1)+')</span><span class="caret">›</span></button><div class="detail" id="d'+i+'" hidden></div></li>'; }).filter(Boolean).join('');
+  var wrong = S.items.map(function(q,i){ return S.ans[i]===q.ans? null : '<li class="ritem"><button data-action="toggle" data-i="'+i+'" aria-expanded="false"><span class="mk ng">×</span><span>問'+q.slot+'　'+esc(topicLabel(q))+'</span><span class="an">('+(S.ans[i]+1)+') → ('+(q.ans+1)+')</span><span class="caret">›</span></button><div class="detail" id="d'+i+'" hidden></div></li>'; }).filter(Boolean).join('');
   return '<div class="stack">'+
     '<div class="spread"><h1>'+(S.mode==="review"?'復習':'ドリル')+'の結果</h1><button class="btn ghost" data-action="home">ホーム</button></div>'+
     '<div class="card"><div class="score">'+ok+'<small>／'+n+'問　'+(n?Math.round(ok/n*100):0)+'%</small></div></div>'+

@@ -36,8 +36,26 @@ def load():
     return data
 
 
+# 三冷の法令論点番号 → 二冷の法令論点番号（令和7年度の出題順に基づく）
+LAW_SLOT_3_TO_2 = {1:1, 2:2, 3:3, 4:7, 5:5, 6:6, 7:8, 8:4, 9:11, 10:16, 11:16, 12:9, 13:10,
+                   14:(12, 15), 15:13, 16:14, 17:17, 18:18, 19:19, 20:20}
+
+
+def assign_slot2(data):
+    """三冷・二冷共用の法令問題に、二冷での論点番号 slot2 を付ける。"""
+    alt = {}
+    for q in data["questions"]:
+        if q["subject"] == "law" and "3" in q["levels"] and "2" in q["levels"]:
+            m = LAW_SLOT_3_TO_2[q["slot"]]
+            if isinstance(m, tuple):
+                i = alt.get(q["slot"], 0); alt[q["slot"]] = i + 1
+                m = m[i % len(m)]
+            q["slot2"] = m
+
+
 def validate_and_fill(data):
     errors = []
+    assign_slot2(data)
     ids = Counter(q["id"] for q in data["questions"])
     for qid, n in ids.items():
         if n > 1:
@@ -78,7 +96,7 @@ def report(data):
     print("正答番号の分布:", dict(sorted(Counter(q["ans"] + 1 for q in data["questions"]).items())))
     for level, subjects in data["topics"].items():
         for subject, topics in subjects.items():
-            have = {q["slot"] for q in data["questions"] if q["subject"] == subject and level in q["levels"]}
+            have = {(q.get("slot2") if level == "2" and q.get("slot2") else q["slot"]) for q in data["questions"] if q["subject"] == subject and level in q["levels"]}
             have |= {t["no"] for t in topics if t.get("gen")}
             missing = [t["no"] for t in topics if t["no"] not in have]
             if missing:
