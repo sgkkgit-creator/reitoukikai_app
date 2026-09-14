@@ -83,7 +83,11 @@ p{margin:0}
 /* question */
 .qbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .qbar .prog{font-variant-numeric:tabular-nums;font-weight:600}
-.timer{font-variant-numeric:tabular-nums;font-weight:700;padding:4px 10px;border-radius:var(--r-sm);background:var(--frost);color:var(--teal-ink)}
+.timer{font-variant-numeric:tabular-nums;font-weight:700;padding:4px 10px;border-radius:var(--r-sm);background:var(--frost);color:var(--teal-ink);border:0;font:inherit;font-weight:700;cursor:pointer}
+.resume{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border-left:4px solid var(--teal-ink)}
+.pause{display:flex;align-items:center;justify-content:center;min-height:60vh;padding:16px}
+.pause-card{background:#fff;border-radius:var(--r);padding:24px 20px;text-align:center;width:100%;max-width:360px;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px}
+.pause-time{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--teal-ink)}
 .timer.low{background:var(--ng-bg);color:var(--ng)}
 .progress{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:14px}
 .progress i{display:block;height:100%;background:var(--teal)}
@@ -366,6 +370,7 @@ function startReview(level){
 function startTimer(){
   stopTimer();
   S.timer = setInterval(function(){
+    if(S.paused) return;
     var left = S.limit - Math.floor((Date.now()-S.start)/1000);
     var el = document.getElementById('timer');
     if(el){ el.textContent = mmss(left); el.className = 'timer' + (left<=300?' low':''); }
@@ -373,8 +378,24 @@ function startTimer(){
   }, 500);
 }
 function stopTimer(){ if(S && S.timer){ clearInterval(S.timer); S.timer=null; } }
+/* ---------- 途中経過の一時保存 ---------- */
+function persistSession(){
+  if(!S || S.finished){ return; }
+  var el = S.mode==="exam" ? Math.floor(((S.paused? S.pausedAt : Date.now())-S.start)/1000) : 0;
+  store.session = {mode:S.mode, level:S.level, subject:S.subject, items:S.items, idx:S.idx, ans:S.ans, revealed:S.revealed||null, strike:S.strike||null, limit:S.limit||0, elapsed:el, t:Date.now()};
+  save();
+}
+function clearSession(){ if(store.session){ delete store.session; save(); } }
+function resumeSession(){
+  var ss = store.session; if(!ss) return;
+  S = {mode:ss.mode, level:ss.level, subject:ss.subject, items:ss.items, idx:ss.idx, ans:ss.ans, revealed:ss.revealed||undefined, strike:ss.strike||undefined, limit:ss.limit, finished:false};
+  if(S.mode==="exam"){ S.start = Date.now()-ss.elapsed*1000; S.paused=true; S.pausedAt=Date.now(); view={name:"q"}; render(); startTimer(); }
+  else { view={name:"q"}; render(); }
+}
+function pauseExam(){ if(!S || S.mode!=="exam" || S.paused) return; S.paused=true; S.pausedAt=Date.now(); render(); }
+function resumeExam(){ if(!S || !S.paused) return; S.start += Date.now()-S.pausedAt; S.paused=false; S.pausedAt=null; render(); }
 function finishExam(auto){
-  stopTimer();
+  stopTimer(); clearSession();
   var ok=0;
   S.items.forEach(function(q,i){ var c = S.ans[i]===q.ans; if(c) ok++; record(q,c); });
   S.finished=true; S.score=ok; S.auto=!!auto; S.elapsed=Math.floor((Date.now()-S.start)/1000);
@@ -391,6 +412,7 @@ function setLevelUI(){
 }
 function render(){
   setLevelUI();
+  if(view.name==="q") persistSession();
   if(view.name==="home") app.innerHTML = renderHome();
   else if(view.name==="setup") app.innerHTML = renderSetup(view.mode);
   else if(view.name==="drillslots") app.innerHTML = renderDrillSlots(view.subject);
@@ -409,7 +431,13 @@ function renderHome(){
   var rp = reviewPool(lv).length;
   var lastExam = store.history.filter(function(h){return h.level===lv;})[0];
   var pills = c.map(function(x){ var label = x.n + "問" + (x.gens? "＋計算"+x.gens+"種" : ""); if(x.n===0 && !x.gens) label="準備中"; return '<span class="pill"><i class="dot '+SUBJ[x.s].cls+'"></i>'+SUBJ[x.s].name+'　'+label+'</span>'; }).join('');
-  return '<div class="stack">'+
+  var ss = store.session, resume = '';
+  if(ss && ss.level===lv){
+    var done = ss.mode==="exam" ? ss.ans.filter(function(a){return a>=0;}).length : (ss.revealed||[]).filter(Boolean).length;
+    var what = ss.mode==="exam" ? '模擬試験　'+SUBJ[ss.subject].name : (ss.mode==="review" ? '復習' : 'ドリル　'+SUBJ[ss.subject].name);
+    resume = '<div class="card resume"><div><b>前回の続き</b><div class="muted small">'+what+'　'+done+'／'+ss.items.length+'問'+(ss.mode==="exam"? '　残り '+mmss(ss.limit-ss.elapsed):'')+'</div></div><div class="row"><button class="btn primary" data-action="resume-session">再開</button><button class="btn ghost" data-action="discard-session">破棄</button></div></div>';
+  }
+  return '<div class="stack">'+resume+
     '<div class="hero"><h1><span class="lv">'+esc(L.short)+'</span>　'+esc(L.name)+'</h1><p class="muted small">科目別に模擬試験・ドリルで練習し、間違えた問題を復習します。合格基準は各科目60%。</p><div class="subjline">'+pills+'</div></div>'+
     '<div class="tiles">'+
       '<button class="tile" data-action="setup" data-mode="exam"><b>模擬試験</b><span>本試験と同じ問数・制限時間。論点ごとに1問ずつ出題し、最後に採点します。</span></button>'+
@@ -476,10 +504,14 @@ function renderQuestion(){
   if(!S || !S.items.length){ return '<div class="stack"><div class="empty">出題できる問題がありません。</div><button class="btn" data-action="home">ホーム</button></div>'; }
   var i = S.idx, q = S.items[i], n = S.items.length;
   var isExam = S.mode==="exam";
+  if(isExam && S.paused){
+    var leftP = S.limit - Math.floor((S.pausedAt-S.start)/1000);
+    return '<div class="pause"><div class="pause-card"><div class="muted small">一時停止中　問 '+(i+1)+' ／ '+n+'</div><div class="pause-time">'+mmss(leftP)+'</div><p class="muted small">停止中は問題を表示しません。再開すると残り時間から続きます。</p><button class="btn primary" data-action="resume">再開する</button><button class="btn ghost" data-action="abort">中断する</button></div></div>';
+  }
   var reveal = !isExam && S.revealed[i];
   var chosen = S.ans[i];
   var head = '<div class="qbar"><span class="prog">問 '+(i+1)+' ／ '+n+'</span>'+
-    (isExam ? '<span id="timer" class="timer">'+mmss(S.limit - Math.floor((Date.now()-S.start)/1000))+'</span>' : '<span class="muted small">'+(S.mode==="review"?'復習':'ドリル')+'　正解 '+S.items.filter(function(x,k){return S.revealed[k] && S.ans[k]===x.ans;}).length+'</span>')+
+    (isExam ? '<button id="timer" class="timer" data-action="pause" title="一時停止" aria-label="一時停止">'+mmss(S.limit - Math.floor((Date.now()-S.start)/1000))+' ⏸</button>' : '<span class="muted small">'+(S.mode==="review"?'復習':'ドリル')+'　正解 '+S.items.filter(function(x,k){return S.revealed[k] && S.ans[k]===x.ans;}).length+'</span>')+
     '</div><div class="progress"><i style="width:'+Math.round(((i+(reveal?1:0))/n)*100)+'%"></i></div>';
   var body = '<div class="qpaper"><div class="qhead"><span class="qno">問'+zen(isExam? q.slot : i+1)+'</span><span class="tag '+SUBJ[q.subject].cls+'">'+SUBJ[q.subject].name+'</span><span class="qtopic">'+esc(topicLabel(q))+'</span></div>'+
     (q.case&&DATA.cases&&DATA.cases[q.case]? '<div class="given" style="margin:0 0 10px">'+esc(DATA.cases[q.case])+'</div>':'')+'<p class="stem">'+esc(q.stem)+'</p>'+
@@ -558,8 +590,8 @@ function renderStats(){
 document.addEventListener('click', function(e){
   var b = e.target.closest('[data-action]'); if(!b) return;
   var act = b.getAttribute('data-action');
-  if(act==="level"){ var lv=b.getAttribute('data-level'); if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断して級を切り替えますか？')) return; stopTimer(); S=null; } store.level=lv; save(); drillSel=null; view={name:"home"}; render(); return; }
-  if(act==="home"){ if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); } S=null; drillSel=null; view={name:"home"}; render(); return; }
+  if(act==="level"){ var lv=b.getAttribute('data-level'); if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断して級を切り替えますか？')) return; stopTimer(); S=null; } clearSession(); store.level=lv; save(); drillSel=null; view={name:"home"}; render(); return; }
+  if(act==="home"){ if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); clearSession(); } S=null; drillSel=null; view={name:"home"}; render(); return; }
   if(act==="setup"){ drillSel=null; view={name:"setup", mode:b.getAttribute('data-mode')}; render(); return; }
   if(act==="exam"){ startExam(store.level, b.getAttribute('data-subject')); return; }
   if(act==="drillslots"){ drillSel=null; view={name:"drillslots", subject:b.getAttribute('data-subject')}; render(); return; }
@@ -580,9 +612,13 @@ document.addEventListener('click', function(e){
   if(act==="prev"){ if(S.idx>0){ S.idx--; render(); } return; }
   if(act==="next"){ if(S.idx<S.items.length-1){ S.idx++; render(); } return; }
   if(act==="jump"){ S.idx=+b.getAttribute('data-i'); render(); return; }
+  if(act==="resume-session"){ resumeSession(); return; }
+  if(act==="discard-session"){ if(!confirm('保存した途中経過を破棄しますか？')) return; clearSession(); render(); return; }
+  if(act==="pause"){ pauseExam(); return; }
+  if(act==="resume"){ resumeExam(); return; }
   if(act==="finish"){ var un=S.ans.filter(function(a){return a<0;}).length; if(un && !confirm('未解答が '+un+' 問あります。採点しますか？')) return; finishExam(false); return; }
-  if(act==="abort"){ if(S.mode==="exam"){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); } S=null; view={name:"home"}; render(); return; }
-  if(act==="drilldone"){ view={name:"drilldone"}; render(); return; }
+  if(act==="abort"){ if(S.mode==="exam"){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); clearSession(); } S=null; view={name:"home"}; render(); return; }
+  if(act==="drilldone"){ clearSession(); view={name:"drilldone"}; render(); return; }
   if(act==="toggle"){ var j=+b.getAttribute('data-i'); var d=document.getElementById('d'+j); var open=b.getAttribute('aria-expanded')==='true'; if(open){ d.hidden=true; d.innerHTML=''; b.setAttribute('aria-expanded','false'); } else { d.innerHTML=detailHTML(S.items[j], S.ans[j]); d.hidden=false; b.setAttribute('aria-expanded','true'); } return; }
 });
 document.addEventListener('keydown', function(e){ if((e.key==='Enter'||e.key===' ') && e.target.getAttribute && e.target.getAttribute('data-action')==='strike'){ e.preventDefault(); e.target.click(); } });
