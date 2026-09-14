@@ -382,12 +382,14 @@ function stopTimer(){ if(S && S.timer){ clearInterval(S.timer); S.timer=null; } 
 function persistSession(){
   if(!S || S.finished){ return; }
   var el = S.mode==="exam" ? Math.floor(((S.paused? S.pausedAt : Date.now())-S.start)/1000) : 0;
-  store.session = {mode:S.mode, level:S.level, subject:S.subject, items:S.items, idx:S.idx, ans:S.ans, revealed:S.revealed||null, strike:S.strike||null, limit:S.limit||0, elapsed:el, t:Date.now()};
+  if(!store.sessions) store.sessions = {};
+  store.sessions[S.level] = {mode:S.mode, level:S.level, subject:S.subject, items:S.items, idx:S.idx, ans:S.ans, revealed:S.revealed||null, strike:S.strike||null, limit:S.limit||0, elapsed:el, t:Date.now()};
   save();
 }
-function clearSession(){ if(store.session){ delete store.session; save(); } }
+function getSession(lv){ return (store.sessions||{})[lv] || null; }
+function clearSession(){ var lv = S ? S.level : store.level; if(store.sessions && store.sessions[lv]){ delete store.sessions[lv]; save(); } }
 function resumeSession(){
-  var ss = store.session; if(!ss) return;
+  var ss = getSession(store.level); if(!ss) return;
   S = {mode:ss.mode, level:ss.level, subject:ss.subject, items:ss.items, idx:ss.idx, ans:ss.ans, revealed:ss.revealed||undefined, strike:ss.strike||undefined, limit:ss.limit, finished:false};
   if(S.mode==="exam"){ S.start = Date.now()-ss.elapsed*1000; S.paused=true; S.pausedAt=Date.now(); view={name:"q"}; render(); startTimer(); }
   else { view={name:"q"}; render(); }
@@ -431,8 +433,8 @@ function renderHome(){
   var rp = reviewPool(lv).length;
   var lastExam = store.history.filter(function(h){return h.level===lv;})[0];
   var pills = c.map(function(x){ var label = x.n + "問" + (x.gens? "＋計算"+x.gens+"種" : ""); if(x.n===0 && !x.gens) label="準備中"; return '<span class="pill"><i class="dot '+SUBJ[x.s].cls+'"></i>'+SUBJ[x.s].name+'　'+label+'</span>'; }).join('');
-  var ss = store.session, resume = '';
-  if(ss && ss.level===lv){
+  var ss = getSession(lv), resume = '';
+  if(ss){
     var done = ss.mode==="exam" ? ss.ans.filter(function(a){return a>=0;}).length : (ss.revealed||[]).filter(Boolean).length;
     var what = ss.mode==="exam" ? '模擬試験　'+SUBJ[ss.subject].name : (ss.mode==="review" ? '復習' : 'ドリル　'+SUBJ[ss.subject].name);
     resume = '<div class="card resume"><div><b>前回の続き</b><div class="muted small">'+what+'　'+done+'／'+ss.items.length+'問'+(ss.mode==="exam"? '　残り '+mmss(ss.limit-ss.elapsed):'')+'</div></div><div class="row"><button class="btn primary" data-action="resume-session">再開</button><button class="btn ghost" data-action="discard-session">破棄</button></div></div>';
@@ -506,7 +508,7 @@ function renderQuestion(){
   var isExam = S.mode==="exam";
   if(isExam && S.paused){
     var leftP = S.limit - Math.floor((S.pausedAt-S.start)/1000);
-    return '<div class="pause"><div class="pause-card"><div class="muted small">一時停止中　問 '+(i+1)+' ／ '+n+'</div><div class="pause-time">'+mmss(leftP)+'</div><p class="muted small">停止中は問題を表示しません。再開すると残り時間から続きます。</p><button class="btn primary" data-action="resume">再開する</button><button class="btn ghost" data-action="abort">中断する</button></div></div>';
+    return '<div class="pause"><div class="pause-card"><div class="muted small">一時停止中</div><div><b>問 '+(i+1)+' から再開</b></div><div class="muted small">解答済み '+S.ans.filter(function(a){return a>=0;}).length+' ／ '+n+'</div><div class="pause-time">'+mmss(leftP)+'</div><p class="muted small">停止中は問題を表示しません。再開すると上の問から残り時間で続きます。</p><button class="btn primary" data-action="resume">再開する</button><button class="btn ghost" data-action="abort">中断する</button></div></div>';
   }
   var reveal = !isExam && S.revealed[i];
   var chosen = S.ans[i];
@@ -590,8 +592,8 @@ function renderStats(){
 document.addEventListener('click', function(e){
   var b = e.target.closest('[data-action]'); if(!b) return;
   var act = b.getAttribute('data-action');
-  if(act==="level"){ var lv=b.getAttribute('data-level'); if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断して級を切り替えますか？')) return; stopTimer(); S=null; } clearSession(); store.level=lv; save(); drillSel=null; view={name:"home"}; render(); return; }
-  if(act==="home"){ if(S && S.mode==="exam" && !S.finished){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); clearSession(); } S=null; drillSel=null; view={name:"home"}; render(); return; }
+  if(act==="level"){ var lv=b.getAttribute('data-level'); if(S && S.mode==="exam" && !S.finished){ if(!S.paused){ S.paused=true; S.pausedAt=Date.now(); } persistSession(); stopTimer(); S=null; } store.level=lv; save(); drillSel=null; view={name:"home"}; render(); return; }
+  if(act==="home"){ if(S && S.mode==="exam" && !S.finished){ if(!S.paused){ S.paused=true; S.pausedAt=Date.now(); } persistSession(); stopTimer(); } S=null; drillSel=null; view={name:"home"}; render(); return; }
   if(act==="setup"){ drillSel=null; view={name:"setup", mode:b.getAttribute('data-mode')}; render(); return; }
   if(act==="exam"){ startExam(store.level, b.getAttribute('data-subject')); return; }
   if(act==="drillslots"){ drillSel=null; view={name:"drillslots", subject:b.getAttribute('data-subject')}; render(); return; }
@@ -617,7 +619,7 @@ document.addEventListener('click', function(e){
   if(act==="pause"){ pauseExam(); return; }
   if(act==="resume"){ resumeExam(); return; }
   if(act==="finish"){ var un=S.ans.filter(function(a){return a<0;}).length; if(un && !confirm('未解答が '+un+' 問あります。採点しますか？')) return; finishExam(false); return; }
-  if(act==="abort"){ if(S.mode==="exam"){ if(!confirm('模擬試験を中断しますか？採点されません。')) return; stopTimer(); clearSession(); } S=null; view={name:"home"}; render(); return; }
+  if(act==="abort"){ if(S.mode==="exam"){ if(!confirm('模擬試験を中断して途中経過を保存しますか？\n残り時間と解答はそのまま残り、ホームの「前回の続き」から再開できます。')) return; if(!S.paused){ S.paused=true; S.pausedAt=Date.now(); } persistSession(); stopTimer(); } S=null; view={name:"home"}; render(); return; }
   if(act==="drilldone"){ clearSession(); view={name:"drilldone"}; render(); return; }
   if(act==="toggle"){ var j=+b.getAttribute('data-i'); var d=document.getElementById('d'+j); var open=b.getAttribute('aria-expanded')==='true'; if(open){ d.hidden=true; d.innerHTML=''; b.setAttribute('aria-expanded','false'); } else { d.innerHTML=detailHTML(S.items[j], S.ans[j]); d.hidden=false; b.setAttribute('aria-expanded','true'); } return; }
 });
