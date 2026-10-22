@@ -27,6 +27,7 @@ Settings → Pages で公開すると、`https://<ユーザー名>.github.io/<�
 | `questions3.json` | 法令の追加問題（20論点×3問＝60問、三冷・二冷共用） |
 | `questions4.json` | 三冷 保安管理技術の追加問題（15論点×3問＝45問） |
 | `questions5.json` | 二冷の追加問題（保安10論点×3問＝30問、学識8論点×3問＝24問） |
+| `questions6.json` | 追加問題（法令20論点×1問＝20問・三冷二冷共用、三冷保安15問、二冷保安10問、二冷学識8問） |
 | `build.py` | 検証・選択肢生成・結合。`python3 build.py` で `index.html` を再生成 |
 
 ## 問題データの形式
@@ -60,7 +61,7 @@ Settings → Pages で公開すると、`https://<ユーザー名>.github.io/<�
 
 ## 問題を追加・修正するとき
 
-1. `questions.json` 又は `questions2.json` を編集（記述内の二重引用符は「」を使う）
+1. `questions.json`〜`questions6.json` のいずれかを編集（記述内の二重引用符は「」を使う）
 2. `python3 build.py` を実行
 3. エラーが出なければ `index.html` が更新されます
 
