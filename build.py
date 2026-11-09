@@ -2,8 +2,8 @@
 """問題データを検証し、選択肢を生成して shell.html に埋め込み、index.html を出力する。
 
 使い方:  python3 build.py
-入力:    shell.html, questions.json, questions2.json（複数ファイルは順に結合）
-出力:    index.html
+入力:    shell.html, questions*.json（複数ファイルは順に結合）, changelog.json（版の履歴）
+出力:    index.html、README.md の「更新履歴」欄
 """
 import hashlib
 import itertools
@@ -17,6 +17,10 @@ ROOT = Path(__file__).parent
 SHELL = ROOT / "shell.html"
 SOURCES = ["questions.json", "questions2.json", "questions3.json", "questions4.json", "questions5.json", "questions6.json", "questions7.json"]
 OUT = ROOT / "index.html"
+CHANGELOG = ROOT / "changelog.json"
+README = ROOT / "README.md"
+HIST_BEGIN = "<!-- HISTORY:BEGIN -->"
+HIST_END = "<!-- HISTORY:END -->"
 PLACEHOLDER = "/*__DATA__*/"
 
 
@@ -103,6 +107,36 @@ def report(data):
                 print(f"  注意: level {level} {subject} に問題のない論点: {missing}")
 
 
+def attach_changelog(data):
+    """changelog.json を読み、版の情報と最新版の問題数をデータに付ける。"""
+    log = json.loads(CHANGELOG.read_text(encoding="utf-8"))["versions"]
+    if not log:
+        sys.exit("changelog.json に版がありません")
+    data["changelog"] = log
+    data["version"] = {"ver": log[0]["ver"], "date": log[0]["date"], "count": len(data["questions"])}
+    return log
+
+
+def update_readme(log, count):
+    """README.md の更新履歴欄（目印コメントの間）を changelog.json から書き直す。"""
+    lines = [HIST_BEGIN, "", "| 版 | 日付 | 主な変更 |", "|---|---|---|"]
+    for i, v in enumerate(log):
+        ch = "<br>".join(v["changes"])
+        if i == 0:
+            ch += f"<br>（この版の問題数：{count}問）"
+        lines.append(f"| {v['ver']} | {v['date']} | {ch} |")
+    lines += ["", HIST_END]
+    block = "\n".join(lines)
+    text = README.read_text(encoding="utf-8")
+    if HIST_BEGIN in text and HIST_END in text:
+        head, rest = text.split(HIST_BEGIN, 1)
+        tail = rest.split(HIST_END, 1)[1]
+        text = head + block + tail
+    else:
+        text = text.rstrip("\n") + "\n\n## 更新履歴\n\n" + block + "\n"
+    README.write_text(text, encoding="utf-8")
+
+
 def main():
     data = load()
     errors = validate_and_fill(data)
@@ -111,6 +145,7 @@ def main():
         for e in errors:
             print("  " + e, file=sys.stderr)
         sys.exit(1)
+    log = attach_changelog(data)
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     if "</script" in payload:
         sys.exit("データに </script が含まれています")
@@ -119,6 +154,8 @@ def main():
         sys.exit("shell.html にプレースホルダがありません")
     OUT.write_text(shell.replace(PLACEHOLDER, payload), encoding="utf-8")
     report(data)
+    update_readme(log, len(data["questions"]))
+    print(f"版: {log[0]['ver']}（{log[0]['date']}）")
     print(f"出力: {OUT.name} ({OUT.stat().st_size:,} bytes)")
 
 

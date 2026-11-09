@@ -63,6 +63,15 @@ p{margin:0}
 .tile span{color:var(--muted);font-size:13px}
 .tile:hover{border-color:var(--teal)}
 .hero{padding:6px 2px 2px}
+.verline{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.verline b{color:var(--teal-ink)}
+.vlog{list-style:none;margin:0;padding:0}
+.vlog>li{border-top:1px solid var(--line);padding:12px 2px}
+.vlog>li:last-child{border-bottom:1px solid var(--line)}
+.vlog .vh{display:flex;gap:10px;align-items:baseline}
+.vlog .vh b{color:var(--teal-ink)}
+.vlog ul{margin:6px 0 0;padding-left:1.2em;font-size:14px}
+.vlog .now{font-size:12px;border:1px solid var(--teal-ink);color:var(--teal-ink);border-radius:999px;padding:0 8px}
 .hero h1{font-size:24px}
 .hero .lv{color:var(--teal-ink)}
 .subjline{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
@@ -422,6 +431,7 @@ function render(){
   else if(view.name==="result") app.innerHTML = renderResult();
   else if(view.name==="drilldone") app.innerHTML = renderDrillDone();
   else if(view.name==="stats") app.innerHTML = renderStats();
+  else if(view.name==="changelog") app.innerHTML = renderChangelog();
   window.scrollTo(0,0);
 }
 function counts(level){
@@ -447,7 +457,23 @@ function renderHome(){
       '<button class="tile" data-action="review"'+(rp?'':' disabled')+'><b>復習　'+(rp? rp+'問':'')+'</b><span>'+(rp? '前回間違えた問題をもう一度解きます。':'間違えた問題がまだありません。')+'</span></button>'+
       '<button class="tile" data-action="stats"><b>成績</b><span>'+(lastExam? '直近の模擬試験：'+SUBJ[lastExam.subject].name+'　'+lastExam.score+'／'+lastExam.total+'　'+(lastExam.pass?'合格':'不合格') : '模擬試験の履歴と論点別の正答率を表示します。')+'</span></button>'+
     '</div>'+
-    '<div class="foot"><p>出題は令和7年度公表問題（高圧ガス保安協会）の論点構成と出題形式に基づいて作成したオリジナル問題です。法令は令和7年4月1日現在の内容を基準にしています。成績はこの端末（ブラウザ）内にのみ保存されます。</p></div>'+
+    verLine()+
+    '<div class="foot"><p>出題は令和7年度・令和8年度公表問題（高圧ガス保安協会）の論点構成と出題形式に基づいて作成したオリジナル問題です。法令は令和7年4月1日現在の内容を基準とし、令和8年度追加分は令和8年4月1日現在の内容に基づいています。成績はこの端末（ブラウザ）内にのみ保存されます。</p></div>'+
+  '</div>';
+}
+function verLine(){
+  var v = DATA.version; if(!v) return '';
+  return '<div class="card verline"><span>版 <b>'+esc(v.ver)+'</b>　'+esc(v.date)+' 更新　全'+v.count+'問</span><button class="btn ghost" data-action="changelog">更新履歴</button></div>';
+}
+function renderChangelog(){
+  var log = DATA.changelog || [];
+  var items = log.map(function(v,i){
+    return '<li><div class="vh"><b>版 '+esc(v.ver)+'</b><span class="muted small">'+esc(v.date)+'</span>'+(i===0?'<span class="now">使用中の版</span>':'')+'</div><ul>'+v.changes.map(function(c){return '<li>'+esc(c)+'</li>';}).join('')+'</ul></li>';
+  }).join('');
+  return '<div class="stack">'+
+    '<div class="spread"><h1>更新履歴</h1><button class="btn ghost" data-action="home">ホーム</button></div>'+
+    '<p class="muted small">画面の版が最新でないときは、ページを再読み込みしてください。</p>'+
+    '<ul class="vlog">'+items+'</ul>'+
   '</div>';
 }
 function renderSetup(mode){
@@ -603,6 +629,7 @@ document.addEventListener('click', function(e){
   if(act==="drillstart"){ startDrill(store.level, b.getAttribute('data-subject'), drillSel.slice()); return; }
   if(act==="review"){ startReview(store.level); return; }
   if(act==="stats"){ view={name:"stats"}; render(); return; }
+  if(act==="changelog"){ view={name:"changelog"}; render(); return; }
   if(act==="reset"){ if(confirm('この端末に保存された成績と復習データをすべて消します。よろしいですか？')){ store.history=[]; store.q={}; save(); render(); } return; }
   if(act==="strike"){ if(!S) return; var si=+b.getAttribute('data-i'); var ss=strikeSet(); var p=ss.indexOf(si); if(p>=0) ss.splice(p,1); else ss.push(si); render(); return; }
   if(act==="choose"){
